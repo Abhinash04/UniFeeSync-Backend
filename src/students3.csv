@@ -1,0 +1,4 @@
+email,name,role,mobile_no,address,course,branch,hostel,roll_number
+student@example.com,John Doe,student,1234567890,123 Main St,BTech,CSE,Hostel A,BTCSE001
+student2@example.com,Jane Smith,student,9876543210,456 Elm St,BTech,ECE,Hostel B,BTECE002
+student3@example.com,Alex Johnson,student,5551234567,789 Oak Ave,BTech,MECH,Hostel C,BTMECH003
