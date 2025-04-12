@@ -27,7 +27,7 @@ class CSVUploadSerializer(serializers.Serializer):
 
     def validate_csv_file(self, value):
         if not value.name.endswith('.csv'):
-            raise serializers.ValidationError("File must be a CSV.")
+            raise serializers.ValidationError("File must be a CSV File")
         return value
 
     def process_csv(self):
