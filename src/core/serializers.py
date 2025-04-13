@@ -1,26 +1,15 @@
-# serializers.py
-from charset_normalizer import from_bytes
 from rest_framework import serializers
-import csv
-from io import StringIO
-from .models import User  # Ensure correct import
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-# src/core/serializers.py
-from rest_framework import serializers
-import csv
-from io import StringIO
+from rest_framework_simplejwt.tokens import RefreshToken
 from .models import User
 from django.contrib.auth import authenticate
-from rest_framework import serializers
-
-from django.contrib.auth.password_validation import validate_password
-from django.utils.encoding import smart_str, force_bytes, DjangoUnicodeDecodeError
+import logging
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
-from django.contrib.auth.tokens import PasswordResetTokenGenerator
-from django.urls import reverse
-
+from django.utils.encoding import force_str
 from django.core.exceptions import ObjectDoesNotExist
-from datetime import datetime   
+import csv
+from io import StringIO
+
+logger = logging.getLogger(__name__)
 
 class CSVUploadSerializer(serializers.Serializer):
     csv_file = serializers.FileField()
@@ -66,47 +55,6 @@ class CSVUploadSerializer(serializers.Serializer):
                 print(f"Saved user: {user.email}, Roll: {user.roll_number}")
             except Exception as e:
                 raise serializers.ValidationError(f"Error creating user {email}: {str(e)}")
-class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-    email = serializers.EmailField(required=True)
-    password = serializers.CharField(required=False, write_only=True)
-    roll_number = serializers.CharField(required=False, write_only=True)
-
-    def validate(self, attrs):
-        email = attrs.get("email")
-        password = attrs.get("password")
-        roll_number = attrs.get("roll_number")
-
-        if password and roll_number:
-            raise serializers.ValidationError("Provide either password or roll_number, not both.")
-        
-        if not password and not roll_number:
-            raise serializers.ValidationError("Either password or roll_number is required.")
-
-        if password:
-            # Admin/Superadmin login with email and password
-            user = authenticate(request=self.context['request'], email=email, password=password)
-            if not user:
-                raise serializers.ValidationError("No user found with the given email and password.")
-        else:
-            # Student first login with email and roll_number
-            try:
-                user = User.objects.get(email=email, roll_number=roll_number)
-                if user.password:  # If password is set, roll_number login isn’t allowed
-                    raise serializers.ValidationError("Use email and password for login.")
-            except User.DoesNotExist:
-                raise serializers.ValidationError("No user found with the given email and roll number.")
-
-        if not user.is_active:
-            raise serializers.ValidationError("Account is not active.")
-
-        
-from rest_framework import serializers
-from rest_framework_simplejwt.tokens import RefreshToken
-from .models import User
-from django.contrib.auth import authenticate
-import logging
-
-logger = logging.getLogger(__name__)
 
 class CustomTokenObtainPairSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
@@ -125,15 +73,13 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             raise serializers.ValidationError("Either password or roll_number is required.")
 
         if password:
-            # Admin/Superadmin login with email and password
             user = authenticate(request=self.context['request'], email=email, password=password)
             if not user:
                 raise serializers.ValidationError("No user found with the given email and password.")
         else:
-            # Student first login with email and roll_number
             try:
                 user = User.objects.get(email=email, roll_number=roll_number)
-                if user.password:  # If password is set, roll_number login isn’t allowed
+                if user.password:
                     raise serializers.ValidationError("Use email and password for login.")
             except User.DoesNotExist:
                 raise serializers.ValidationError("No user found with the given email and roll_number.")
@@ -141,7 +87,6 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
         if not user.is_active:
             raise serializers.ValidationError("Account is not active.")
 
-        # Generate tokens
         refresh = RefreshToken.for_user(user)
         refresh['role'] = user.role
         refresh['must_reset_password'] = user.must_reset_password
@@ -151,11 +96,11 @@ class CustomTokenObtainPairSerializer(serializers.Serializer):
             'access': str(refresh.access_token),
         }
 
-
 class StudentPasswordResetSerializer(serializers.Serializer):
-    new_password = serializers.CharField(write_only=True)
+    newpassword = serializers.CharField(write_only=True)
 
     def validate(self, data):
+        print("VALIDATION DATA:", data)
         user = self.context['request'].user
         if not user.must_reset_password:
             raise serializers.ValidationError("Password reset not required.")
@@ -165,41 +110,20 @@ class StudentPasswordResetSerializer(serializers.Serializer):
         user = self.context['request'].user
         user.set_password(self.validated_data['new_password'])
         user.must_reset_password = False
-        user.is_active = True  # Activate after reset
+        user.is_active = True
         user.save()
         return user
-from rest_framework import serializers
-from .models import User
 
 class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['email', 'name', 'mobile_no', 'address', 'course', 'branch', 'hostel', 'roll_number']
+
 class UserListSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ['id', 'email', 'name', 'role', 'mobile_no', 'course', 'branch', 'hostel', 'roll_number']
-from rest_framework import serializers
-from django.utils.http import urlsafe_base64_decode
-from django.utils.encoding import force_str
-from .models import User
-import uuid
 
-# Existing student first-login reset serializer (assumed)
-class StudentPasswordResetSerializer(serializers.Serializer):
-    email = serializers.EmailField()
-    roll_number = serializers.CharField(max_length=20)
-
-    def validate(self, data):
-        try:
-            user = User.objects.get(email=data['email'], roll_number=data['roll_number'])
-            if not user.must_reset_password:
-                raise serializers.ValidationError("Password reset not required for this user.")
-        except User.DoesNotExist:
-            raise serializers.ValidationError("Invalid email or roll number.")
-        return data
-
-# New forgot password serializer for all users
 class ForgotPasswordResetSerializer(serializers.Serializer):
     email = serializers.EmailField()
 
@@ -211,13 +135,11 @@ class ForgotPasswordResetSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("No user found with this email.")
         return value
-    
-logger = logging.getLogger(__name__)
+
 class ForgotPasswordConfirmSerializer(serializers.Serializer):
     new_password = serializers.CharField(write_only=True, min_length=8)
 
     def __init__(self, *args, **kwargs):
-        # Extract uidb64 and token from kwargs, falling back to context if not present
         self.uidb64 = kwargs.pop('uidb64', kwargs.get('context', {}).get('uidb64', None))
         self.token = kwargs.pop('token', kwargs.get('context', {}).get('token', None))
         logger.debug(f"Serializer initialized with uidb64={self.uidb64}, token={self.token}")

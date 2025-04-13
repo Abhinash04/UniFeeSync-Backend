@@ -53,7 +53,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_superadmin = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    must_reset_password = models.BooleanField(default=False)
+    must_reset_password = models.BooleanField(default=True)
     reset_token = models.CharField(max_length=36, blank=True, null=True)
 
     objects = UserManager()
